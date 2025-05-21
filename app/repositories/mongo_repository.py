@@ -143,3 +143,11 @@ class MongoRepository:
         )
         if result.matched_count == 0:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
+
+    def get_connections_by_icon(self, icon_id: str):
+        icon_obj_id = ObjectId(icon_id)
+        connections = self.connections.find(
+            {"icons.id": icon_obj_id},
+            {"name": 1}  # Only return name field plus _id by default
+        )
+        return [{"id": str(conn["_id"]), "name": conn["name"]} for conn in connections]

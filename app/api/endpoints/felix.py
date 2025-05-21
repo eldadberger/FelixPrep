@@ -77,3 +77,8 @@ def update_icon_score(
 ):
     db.update_icon_score(connection_id, icon_id, score)
     return {"updated": True}
+
+
+@router.get("/icons/{icon_id}/connections", response_model=list[dict])
+def get_connections_for_icon(icon_id: str, db: Annotated[MongoRepository, Depends(get_mongo_repository)]):
+    return db.get_connections_by_icon(icon_id)
