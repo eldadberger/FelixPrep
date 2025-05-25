@@ -14,12 +14,9 @@ router = APIRouter()
 def get_icons(db: Annotated[MongoRepository, Depends(get_mongo_repository)],
               icon_id: Optional[str] = None,
               name: Optional[str] = None,
+              withConnections: Optional[bool] = False
               ):
-    result = db.get_icon(icon_id, name)
-    if isinstance(result, list):
-        return [{**icon, "_id": str(icon["_id"])} for icon in result]
-    else:
-        return {**result, "_id": str(result["_id"])}
+    return db.get_icon(icon_id, name, withConnections)
 
 
 @router.post("/icons", response_model=dict)

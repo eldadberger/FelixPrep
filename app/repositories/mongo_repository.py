@@ -19,19 +19,43 @@ class MongoRepository:
         self.icons.create_index("svg", unique=True)
         self.connections.create_index("name", unique=True)
 
-    def get_icon(self, icon_id: Optional[str] = None, name: Optional[str] = None):
+    def get_icon(self, icon_id: Optional[str], name: Optional[str], with_connections: bool = False):
         query = {}
         if icon_id:
             query["_id"] = ObjectId(icon_id)
         elif name:
             query["name"] = name
         else:
-            return list(self.icons.find())
+            icons = self.icons.find()
+            return [
+                {
+                    "id": str(icon["_id"]),
+                    "name": icon["name"],
+                    "svg": icon["svg"]
+                }
+                for icon in icons
+            ]
 
         icon = self.icons.find_one(query)
         if not icon:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Icon not found")
-        return icon
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
+
+        icon_data = {
+            "id": str(icon["_id"]),
+            "name": icon["name"],
+            "svg": icon["svg"]
+        }
+
+        if with_connections:
+            connections = self.connections.find(
+                {"icons.id": icon["_id"]},
+                {"name": 1}
+            )
+            icon_data["connections"] = [
+                {"id": str(c["_id"]), "name": c["name"]} for c in connections
+            ]
+
+        return icon_data
 
     def create_icon(self, icon: IconCreate) -> str:
         result = self.icons.insert_one(icon.dict())
