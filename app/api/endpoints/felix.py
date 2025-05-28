@@ -3,6 +3,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from app.common.schemas.mongo.ConnectionCreate import ConnectionCreate
 from app.common.schemas.mongo.ConnectionResponse import ConnectionResponse
 from app.common.schemas.mongo.IconCreate import IconCreate
+from app.common.schemas.mongo.IconScore import IconScore
 from app.common.schemas.mongo.IconUpdate import IconUpdate
 from app.repositories.deps import get_mongo_repository
 from app.repositories.mongo_repository import MongoRepository
@@ -29,14 +30,11 @@ def get_all_connections(db: Annotated[MongoRepository, Depends(get_mongo_reposit
     return db.get_all_connections_with_icons()
 
 
-@router.get("/connections/detail", response_model=ConnectionResponse)
+@router.get("/connections/{connection_id}", response_model=ConnectionResponse)
 def get_connection_detail(db: Annotated[MongoRepository, Depends(get_mongo_repository)],
-                          connection_id: Optional[str] = None,
-                          name: Optional[str] = None,
+                          connection_id: str
                           ):
-    if not connection_id and not name:
-        raise HTTPException(status_code=400, detail="You must have connection identifier (id/name)")
-    return db.get_connection_with_icons(connection_id, name)
+    return db.get_connection_with_icons(connection_id)
 
 
 @router.post("/connections", response_model=dict)
@@ -44,14 +42,14 @@ def create_connection(conn: ConnectionCreate, db: Annotated[MongoRepository, Dep
     return {"id": db.create_connection(conn)}
 
 
-@router.post("/connections/{connection_name}/icons/{icon_id}", response_model=dict)
+@router.post("/connections/{connection_id}/icons/{icon_id}", response_model=dict)
 def add_icon_to_connection(
         connection_id: str,
         icon_id: str,
-        score: float,
+        body: IconScore,
         db: Annotated[MongoRepository, Depends(get_mongo_repository)]
 ):
-    db.add_icon_to_connection(icon_id, connection_id, score)
+    db.add_icon_to_connection(icon_id, connection_id, body.score)
     return {"added": True}
 
 
@@ -69,10 +67,10 @@ def remove_icon(
 def update_icon_score(
     connection_id: str,
     icon_id: str,
-    score: float,
+    body: IconScore,
     db: Annotated[MongoRepository, Depends(get_mongo_repository)]
 ):
-    db.update_icon_score(connection_id, icon_id, score)
+    db.update_icon_score(connection_id, icon_id, body.score)
     return {"updated": True}
 
 
