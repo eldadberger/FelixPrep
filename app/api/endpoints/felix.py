@@ -63,7 +63,7 @@ def remove_icon(
     return {"removed": True}
 
 
-@router.put("/connections/{connection_id}/icon/{icon_id}/score", response_model=dict)
+@router.put("/connections/{connection_id}/icons/{icon_id}/score", response_model=dict)
 def update_icon_score(
     connection_id: str,
     icon_id: str,
