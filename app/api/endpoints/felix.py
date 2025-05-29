@@ -8,6 +8,7 @@ from app.common.schemas.mongo.IconUpdate import IconUpdate
 from app.repositories.deps import get_mongo_repository
 from app.repositories.mongo_repository import MongoRepository
 
+
 router = APIRouter()
 
 
@@ -23,6 +24,15 @@ def get_icons(db: Annotated[MongoRepository, Depends(get_mongo_repository)],
 @router.post("/icons", response_model=dict)
 def create_icon(icon: IconCreate, db: Annotated[MongoRepository, Depends(get_mongo_repository)]):
     return {"id": db.create_icon(icon)}
+
+
+@router.delete("/icons/{icon_id}")
+def remove_icon(
+        icon_id: str,
+        db: Annotated[MongoRepository, Depends(get_mongo_repository)]
+):
+    db.delete_icon_and_remove_references(icon_id)
+    return {"removed": True}
 
 
 @router.get("/connections")
@@ -55,9 +65,9 @@ def add_icon_to_connection(
 
 @router.delete("/connections/{connection_id}/icons/{icon_id}", response_model=dict)
 def remove_icon(
-    connection_id: str,
-    icon_id: str,
-    db: Annotated[MongoRepository, Depends(get_mongo_repository)]
+        connection_id: str,
+        icon_id: str,
+        db: Annotated[MongoRepository, Depends(get_mongo_repository)]
 ):
     db.remove_icon_from_connection(connection_id, icon_id)
     return {"removed": True}
@@ -65,10 +75,10 @@ def remove_icon(
 
 @router.put("/connections/{connection_id}/icons/{icon_id}/score", response_model=dict)
 def update_icon_score(
-    connection_id: str,
-    icon_id: str,
-    body: IconScore,
-    db: Annotated[MongoRepository, Depends(get_mongo_repository)]
+        connection_id: str,
+        icon_id: str,
+        body: IconScore,
+        db: Annotated[MongoRepository, Depends(get_mongo_repository)]
 ):
     db.update_icon_score(connection_id, icon_id, body.score)
     return {"updated": True}

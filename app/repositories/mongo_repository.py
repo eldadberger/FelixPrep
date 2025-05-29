@@ -175,3 +175,16 @@ class MongoRepository:
             {"name": 1}  # Only return name field plus _id by default
         )
         return [{"id": str(conn["_id"]), "name": conn["name"]} for conn in connections]
+
+
+    def delete_icon_and_remove_references(self, icon_id: str):
+        icon_id = ObjectId(icon_id)
+
+        # Delete the icon from the icon collection
+        icon_result = self.icons.delete_one({"_id": icon_id})
+
+        # Remove the icon from all connections
+        connection_result = self.connections.update_many(
+            {"icons.id": icon_id},
+            {"$pull": {"icons": {"id": icon_id}}}
+        )
