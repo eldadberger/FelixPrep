@@ -1,6 +1,8 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
+
+from app.api.handlers.exceptions_handler import exceptions_handler
 from app.api.router import api_router
 from app.settings import settings
 import nest_asyncio
@@ -16,10 +18,12 @@ app = FastAPI(
 
 app.include_router(api_router, prefix="/api")
 
+app.add_exception_handler(Exception, exceptions_handler)
+
 # Sets all CORS enabled origins
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[str(origin) for origin in settings.BACKEND_CORS_ORIGINS],
+    allow_origins=["*"],  # Allow all origins
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"]
