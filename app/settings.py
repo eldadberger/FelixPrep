@@ -13,6 +13,7 @@ class Settings(BaseSettings):
 
     SVG_REPOSITORY_API_BASE_URL: str = "https://api.svgrepo.com"
     SVG_REPOSITORY_BASE_URL: str = "https://www.svgrepo.com"
+    MONGO_URL: str = "mongodb://localhost:27017/"
 
     class Config:
         env_file = ".env"

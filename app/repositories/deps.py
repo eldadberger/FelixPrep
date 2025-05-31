@@ -16,7 +16,7 @@ def get_requests_session() -> Generator[requests.Session, None, None]:
         session.close()
 
 
-client = MongoClient("mongodb://localhost:27017/")
+client = MongoClient(settings.MONGO_URL)
 
 
 def get_mongo_repository():
