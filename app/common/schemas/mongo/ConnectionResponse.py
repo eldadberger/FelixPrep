@@ -1,9 +1,9 @@
 from typing import List
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 
 class ConnectionResponse(BaseModel):
-    id: str = Field(..., alias="_id")
+    id: str
     name: str
     icons: List[dict]

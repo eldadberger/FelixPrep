@@ -26,15 +26,28 @@ class MongoRepository:
         elif name:
             query["name"] = name
         else:
-            icons = self.icons.find()
-            return [
-                {
+            icons = list(self.icons.find())
+            icon_list = []
+
+            for icon in icons:
+                icon_data = {
                     "id": str(icon["_id"]),
                     "name": icon["name"],
                     "svg": icon["svg"]
                 }
-                for icon in icons
-            ]
+
+                if with_connections:
+                    connections = self.connections.find(
+                        {"icons.id": icon["_id"]},
+                        {"name": 1}
+                    )
+                    icon_data["connections"] = [
+                        {"id": str(c["_id"]), "name": c["name"]} for c in connections
+                    ]
+
+                icon_list.append(icon_data)
+
+            return icon_list
 
         icon = self.icons.find_one(query)
         if not icon:
@@ -60,6 +73,54 @@ class MongoRepository:
     def create_icon(self, icon: IconCreate) -> str:
         result = self.icons.insert_one(icon.dict())
         return str(result.inserted_id)
+
+    def update_icon_by_id(self, icon_id: str, name: Optional[str] = None, svg: Optional[str] = None):
+        icon_obj_id = ObjectId(icon_id)
+
+        update_fields = {}
+        if name is not None:
+            update_fields["name"] = name
+        if svg is not None:
+            update_fields["svg"] = svg
+
+        if not update_fields:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="At least one field (name or svg) must be provided for update."
+            )
+
+        result = self.icons.update_one(
+            {"_id": icon_obj_id},
+            {"$set": update_fields}
+        )
+
+        if not result.matched_count:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Icon not found."
+            )
+
+        updated_icon = self.icons.find_one({"_id": icon_obj_id})
+        if updated_icon is None:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Updated icon could not be retrieved."
+            )
+
+        return {
+            "id": str(updated_icon["_id"]),
+            "name": updated_icon["name"],
+            "svg": updated_icon["svg"]
+        }
+
+    def delete_icon_and_remove_references(self, icon_id):
+        icon_id = ObjectId(icon_id)
+
+        self.icons.delete_one({"_id": icon_id})
+        self.connections.update_many(
+            {"icons.id": icon_id},
+            {"$pull": {"icons": {"id": icon_id}}}
+        )
 
     def get_all_connections_with_icons(self):
         all_conns = self.connections.find()
@@ -92,8 +153,8 @@ class MongoRepository:
 
         return result
 
-    def get_connection_with_icons(self, connection_id: Optional[str] = None, name: Optional[str] = None):
-        query = {"_id": ObjectId(connection_id)} if connection_id else {"name": name}
+    def get_connection_with_icons(self, connection_id: str):
+        query = {"_id": ObjectId(connection_id)}
         conn = self.connections.find_one(query)
         if not conn:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Connection not found")
@@ -115,11 +176,27 @@ class MongoRepository:
                     "score": icon_ref["score"]
                 })
 
-        return {"_id": str(conn["_id"]), "name": conn["name"], "icons": expanded}
+        return {"id": str(conn["_id"]), "name": conn["name"], "icons": expanded}
 
     def create_connection(self, conn: ConnectionCreate) -> str:
         result = self.connections.insert_one({"name": conn.name, "icons": []})
         return str(result.inserted_id)
+
+    def update_connection(self, connection_id: str, conn: ConnectionCreate):
+        connection_id = ObjectId(connection_id)
+        result = self.connections.update_one(
+            {"_id": connection_id},
+            {"$set": {"name": conn.name}}
+        )
+
+        if not result.matched_count:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Connection not found."
+            )
+
+    def delete_connection(self, connection_id):
+        self.connections.delete_one({"_id": ObjectId(connection_id)})
 
     def add_icon_to_connection(self, icon_id: str, connection_id: str, score: float):
         icon = self.icons.find_one({"_id": ObjectId(icon_id)})
@@ -176,15 +253,3 @@ class MongoRepository:
         )
         return [{"id": str(conn["_id"]), "name": conn["name"]} for conn in connections]
 
-
-    def delete_icon_and_remove_references(self, icon_id: str):
-        icon_id = ObjectId(icon_id)
-
-        # Delete the icon from the icon collection
-        icon_result = self.icons.delete_one({"_id": icon_id})
-
-        # Remove the icon from all connections
-        connection_result = self.connections.update_many(
-            {"icons.id": icon_id},
-            {"$pull": {"icons": {"id": icon_id}}}
-        )

@@ -1,5 +1,5 @@
 from typing import Annotated, Optional
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends
 from app.common.schemas.mongo.ConnectionCreate import ConnectionCreate
 from app.common.schemas.mongo.ConnectionResponse import ConnectionResponse
 from app.common.schemas.mongo.IconCreate import IconCreate
@@ -7,7 +7,6 @@ from app.common.schemas.mongo.IconScore import IconScore
 from app.common.schemas.mongo.IconUpdate import IconUpdate
 from app.repositories.deps import get_mongo_repository
 from app.repositories.mongo_repository import MongoRepository
-
 
 router = APIRouter()
 
@@ -26,8 +25,13 @@ def create_icon(icon: IconCreate, db: Annotated[MongoRepository, Depends(get_mon
     return {"id": db.create_icon(icon)}
 
 
+@router.put("/icons/{icon_id}")
+def update_icon(icon_id: str, icon: IconUpdate, db: Annotated[MongoRepository, Depends(get_mongo_repository)]):
+    return db.update_icon_by_id(icon_id, icon.name, icon.svg)
+
+
 @router.delete("/icons/{icon_id}")
-def remove_icon(
+def delete_icon(
         icon_id: str,
         db: Annotated[MongoRepository, Depends(get_mongo_repository)]
 ):
@@ -52,6 +56,17 @@ def create_connection(conn: ConnectionCreate, db: Annotated[MongoRepository, Dep
     return {"id": db.create_connection(conn)}
 
 
+@router.put("/connections/{connection_id}")
+def update_connection(connection_id: str, conn: ConnectionCreate,
+                      db: Annotated[MongoRepository, Depends(get_mongo_repository)]):
+    db.update_connection(connection_id, conn)
+
+
+@router.delete("/connections/{connection_id}")
+def delete_connection(connection_id: str, db: Annotated[MongoRepository, Depends(get_mongo_repository)]):
+    db.delete_connection(connection_id)
+
+
 @router.post("/connections/{connection_id}/icons/{icon_id}", response_model=dict)
 def add_icon_to_connection(
         connection_id: str,
@@ -64,7 +79,7 @@ def add_icon_to_connection(
 
 
 @router.delete("/connections/{connection_id}/icons/{icon_id}", response_model=dict)
-def remove_icon(
+def remove_icon_from_collection(
         connection_id: str,
         icon_id: str,
         db: Annotated[MongoRepository, Depends(get_mongo_repository)]
