@@ -1,7 +1,10 @@
 from fastapi import HTTPException
 from typing import Optional
 from bson import ObjectId
+from pymongo import ASCENDING
+
 from app.common.schemas.mongo.ConnectionCreate import ConnectionCreate
+from app.common.schemas.mongo.Credit import Credit
 from app.common.schemas.mongo.IconCreate import IconCreate
 from starlette import status
 
@@ -12,12 +15,17 @@ class MongoRepository:
         self.db = self.client["felix"]
         self.icons = self.db["icons"]
         self.connections = self.db["connections"]
+        self.credits = self.db["credits"]
         self._ensure_indexes()
 
     def _ensure_indexes(self):
         self.icons.create_index("name", unique=True)
         self.icons.create_index("svg", unique=True)
         self.connections.create_index("name", unique=True)
+        self.credits.create_index(
+            [("set_name", ASCENDING), ("author", ASCENDING)],
+            unique=True
+        )
 
     def get_icon(self, icon_id: Optional[str], name: Optional[str], with_connections: bool = False):
         query = {}
@@ -28,13 +36,15 @@ class MongoRepository:
         else:
             icons = list(self.icons.find())
             icon_list = []
-
             for icon in icons:
                 icon_data = {
                     "id": str(icon["_id"]),
                     "name": icon["name"],
-                    "svg": icon["svg"]
+                    "svg": icon["svg"],
                 }
+                if icon.get("credit"):  # only if exists and not None
+                    credit_doc = self.credits.find_one({"_id": icon["credit"]})
+                    icon_data["credit"] = Credit.from_mongo(credit_doc) if credit_doc else None
 
                 if with_connections:
                     connections = self.connections.find(
@@ -56,8 +66,11 @@ class MongoRepository:
         icon_data = {
             "id": str(icon["_id"]),
             "name": icon["name"],
-            "svg": icon["svg"]
+            "svg": icon["svg"],
         }
+        if icon.get("credit"):  # only if exists and not None
+            credit_doc = self.credits.find_one({"_id": icon["credit"]})
+            icon_data["credit"] = Credit.from_mongo(credit_doc) if credit_doc else None
 
         if with_connections:
             connections = self.connections.find(
@@ -71,27 +84,45 @@ class MongoRepository:
         return icon_data
 
     def create_icon(self, icon: IconCreate) -> str:
-        result = self.icons.insert_one(icon.dict())
+        result = self.icons.insert_one(icon.to_mongo())
         return str(result.inserted_id)
 
-    def update_icon_by_id(self, icon_id: str, name: Optional[str] = None, svg: Optional[str] = None):
+    def update_icon_by_id(
+            self,
+            icon_id: str,
+            name: Optional[str] = None,
+            svg: Optional[str] = None,
+            credit_id: Optional[str] = None
+    ):
         icon_obj_id = ObjectId(icon_id)
 
         update_fields = {}
+        unset_fields = {}
+
         if name is not None:
             update_fields["name"] = name
         if svg is not None:
             update_fields["svg"] = svg
+        if credit_id is not None:
+            update_fields["credit"] = ObjectId(credit_id)
+        elif credit_id is None:
+            unset_fields["credit"] = ""
 
-        if not update_fields:
+        if not update_fields and not unset_fields:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="At least one field (name or svg) must be provided for update."
+                detail="At least one field (name, svg or credit_id) must be provided for update."
             )
+
+        update_query = {}
+        if update_fields:
+            update_query["$set"] = update_fields
+        if unset_fields:
+            update_query["$unset"] = unset_fields
 
         result = self.icons.update_one(
             {"_id": icon_obj_id},
-            {"$set": update_fields}
+            update_query
         )
 
         if not result.matched_count:
@@ -107,10 +138,15 @@ class MongoRepository:
                 detail="Updated icon could not be retrieved."
             )
 
+        if updated_icon.get("credit"):  # only if exists and not None
+            credit_doc = self.credits.find_one({"_id": updated_icon["credit"]})
+            updated_icon["credit"] = Credit.from_mongo(credit_doc) if credit_doc else None
+
         return {
             "id": str(updated_icon["_id"]),
             "name": updated_icon["name"],
-            "svg": updated_icon["svg"]
+            "svg": updated_icon["svg"],
+            "credit": updated_icon.get("credit")
         }
 
     def delete_icon_and_remove_references(self, icon_id):
@@ -252,4 +288,57 @@ class MongoRepository:
             {"name": 1}  # Only return name field plus _id by default
         )
         return [{"id": str(conn["_id"]), "name": conn["name"]} for conn in connections]
+
+    def get_all_credits(self):
+        res = self.credits.find({})
+        return [
+            {
+                "id": str(c["_id"]),
+                "set_name": c.get("set_name"),
+                "author": c.get("author"),
+                "source": c.get("source"),
+                "license_name": c.get("license_name"),
+                "license_url": c.get("license_url"),
+            }
+            for c in res
+        ]
+
+    def insert_credit(self, credit: Credit):
+        doc = credit.dict()
+        doc["_id"] = ObjectId()
+        result = self.credits.insert_one(doc)
+        return {"id": str(result.inserted_id)}
+
+    def update_credit_by_id(self, credit_id: str, update_data: dict):
+        result = self.credits.update_one(
+            {"_id": ObjectId(credit_id)},
+            {"$set": update_data}
+        )
+        return result.modified_count
+
+    def connect_credit_to_icon(self, icon_id: str, credit_id: str):
+        result = self.icons.update_one(
+            {"_id": ObjectId(icon_id)},
+            {"$set": {"credit": ObjectId(credit_id)}}
+        )
+        return result.modified_count
+
+    def disconnect_credit_from_icon(self, icon_id: str):
+        result = self.icons.update_one(
+            {"_id": ObjectId(icon_id)},
+            {"$unset": {"credit": ""}}
+        )
+        return result.modified_count
+
+    def delete_credit(self, credit_id: str):
+        credit = self.credits.find_one({"_id": ObjectId(credit_id)})
+        if not credit:
+            raise HTTPException(status_code=404, detail="Credit not found")
+
+        self.icons.update_many(
+            {"credit": ObjectId(credit_id)},
+            {"$unset": {"credit": ""}}  # removes the field
+        )
+
+        self.credits.delete_one({"_id": ObjectId(credit_id)})
 
