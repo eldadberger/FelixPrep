@@ -2,6 +2,7 @@ from typing import Annotated, Optional
 from fastapi import APIRouter, Depends
 from app.common.schemas.mongo.ConnectionCreate import ConnectionCreate
 from app.common.schemas.mongo.ConnectionResponse import ConnectionResponse
+from app.common.schemas.mongo.Credit import Credit
 from app.common.schemas.mongo.IconCreate import IconCreate
 from app.common.schemas.mongo.IconScore import IconScore
 from app.common.schemas.mongo.IconUpdate import IconUpdate
@@ -27,7 +28,7 @@ def create_icon(icon: IconCreate, db: Annotated[MongoRepository, Depends(get_mon
 
 @router.put("/icons/{icon_id}")
 def update_icon(icon_id: str, icon: IconUpdate, db: Annotated[MongoRepository, Depends(get_mongo_repository)]):
-    return db.update_icon_by_id(icon_id, icon.name, icon.svg)
+    return db.update_icon_by_id(icon_id, icon.name, icon.svg, icon.credit)
 
 
 @router.delete("/icons/{icon_id}")
@@ -102,3 +103,38 @@ def update_icon_score(
 @router.get("/icons/{icon_id}/connections", response_model=list[dict])
 def get_connections_for_icon(icon_id: str, db: Annotated[MongoRepository, Depends(get_mongo_repository)]):
     return db.get_connections_by_icon(icon_id)
+
+
+@router.get("/credits")
+def get_credits(db: Annotated[MongoRepository, Depends(get_mongo_repository)]):
+    return db.get_all_credits()
+
+
+@router.post("/credits")
+def insert_credit(credit: Credit, db: Annotated[MongoRepository, Depends(get_mongo_repository)]):
+    return db.insert_credit(credit)
+
+
+@router.patch("/credits/{credit_id}")
+def update_credit_by_id(credit_id: str, update_data: Credit,
+                        db: Annotated[MongoRepository, Depends(get_mongo_repository)]):
+    db.update_credit_by_id(credit_id, update_data.dict())
+    return {"updated": True}
+
+
+@router.post("/icons/{icon_id}/credits/{credit_id}")
+def connect_credit_to_icon(icon_id: str, credit_id: str, db: Annotated[MongoRepository, Depends(get_mongo_repository)]):
+    db.connect_credit_to_icon(icon_id, credit_id)
+    return {"connected": True}
+
+
+@router.delete("/icons/{icon_id}/credits")
+def disconnect_credit_from_icon(icon_id: str, db: Annotated[MongoRepository, Depends(get_mongo_repository)]):
+    db.disconnect_credit_from_icon(icon_id)
+    return {"disconnected": True}
+
+
+@router.delete("/credits/{credit_id}")
+def delete_credit(credit_id: str, db: Annotated[MongoRepository, Depends(get_mongo_repository)]):
+    db.delete_credit(credit_id)
+    return {"deleted": True}
