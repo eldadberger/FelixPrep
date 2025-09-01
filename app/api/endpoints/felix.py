@@ -1,11 +1,11 @@
-from typing import Annotated, Optional
-from fastapi import APIRouter, Depends
+from typing import Annotated, Optional, List
+from fastapi import APIRouter, Depends, Query
 from app.common.schemas.mongo.ConnectionCreate import ConnectionCreate
 from app.common.schemas.mongo.ConnectionResponse import ConnectionResponse
 from app.common.schemas.mongo.Credit import Credit
-from app.common.schemas.mongo.IconCreate import IconCreate
 from app.common.schemas.mongo.IconScore import IconScore
-from app.common.schemas.mongo.IconUpdate import IconUpdate
+from app.common.schemas.mongo.icons.IconCreate import IconCreate
+from app.common.schemas.mongo.tags.TagCreate import TagCreate
 from app.repositories.deps import get_mongo_repository
 from app.repositories.mongo_repository import MongoRepository
 
@@ -14,11 +14,13 @@ router = APIRouter()
 
 @router.get("/icons")
 def get_icons(db: Annotated[MongoRepository, Depends(get_mongo_repository)],
-              icon_id: Optional[str] = None,
-              name: Optional[str] = None,
-              withConnections: Optional[bool] = False
-              ):
-    return db.get_icon(icon_id, name, withConnections)
+              name: Optional[str] = Query(None)):
+    return db.get_all_icons_expanded(name)
+
+
+@router.get("/icons/{icon_id}")
+def get_icon(icon_id: str, db: Annotated[MongoRepository, Depends(get_mongo_repository)]):
+    return db.get_icon_by_id(icon_id)
 
 
 @router.post("/icons", response_model=dict)
@@ -27,7 +29,7 @@ def create_icon(icon: IconCreate, db: Annotated[MongoRepository, Depends(get_mon
 
 
 @router.put("/icons/{icon_id}")
-def update_icon(icon_id: str, icon: IconUpdate, db: Annotated[MongoRepository, Depends(get_mongo_repository)]):
+def update_icon(icon_id: str, icon: IconCreate, db: Annotated[MongoRepository, Depends(get_mongo_repository)]):
     return db.update_icon_by_id(icon_id, icon.name, icon.svg, icon.credit)
 
 
@@ -36,73 +38,54 @@ def delete_icon(
         icon_id: str,
         db: Annotated[MongoRepository, Depends(get_mongo_repository)]
 ):
-    db.delete_icon_and_remove_references(icon_id)
+    db.delete_icon(icon_id)
     return {"removed": True}
 
 
-@router.get("/connections")
-def get_all_connections(db: Annotated[MongoRepository, Depends(get_mongo_repository)]):
-    return db.get_all_connections_with_icons()
+@router.get("/tags")
+def get_all_tags(db: Annotated[MongoRepository, Depends(get_mongo_repository)]):
+    return db.get_all_tags()
 
 
-@router.get("/connections/{connection_id}", response_model=ConnectionResponse)
-def get_connection_detail(db: Annotated[MongoRepository, Depends(get_mongo_repository)],
-                          connection_id: str
-                          ):
-    return db.get_connection_with_icons(connection_id)
+@router.get("/tags/{tag_id}/icons")
+def get_tag_icons(db: Annotated[MongoRepository, Depends(get_mongo_repository)], tag_id: str):
+    return db.get_tag_icons(tag_id)
 
 
-@router.post("/connections", response_model=dict)
-def create_connection(conn: ConnectionCreate, db: Annotated[MongoRepository, Depends(get_mongo_repository)]):
-    return {"id": db.create_connection(conn)}
+@router.post("/tags", response_model=dict)
+def create_tag(conn: TagCreate, db: Annotated[MongoRepository, Depends(get_mongo_repository)]):
+    return {"id": db.create_tag(conn)}
 
 
-@router.put("/connections/{connection_id}")
-def update_connection(connection_id: str, conn: ConnectionCreate,
+@router.put("/tags/{tag_id}")
+def update_connection(tag_id: str, tag: TagCreate,
                       db: Annotated[MongoRepository, Depends(get_mongo_repository)]):
-    db.update_connection(connection_id, conn)
+    db.update_tag(tag_id, tag)
 
 
-@router.delete("/connections/{connection_id}")
-def delete_connection(connection_id: str, db: Annotated[MongoRepository, Depends(get_mongo_repository)]):
-    db.delete_connection(connection_id)
+@router.delete("/tags/{tag_id}")
+def delete_connection(tag_id: str, db: Annotated[MongoRepository, Depends(get_mongo_repository)]):
+    db.delete_tag(tag_id)
 
 
-@router.post("/connections/{connection_id}/icons/{icon_id}", response_model=dict)
-def add_icon_to_connection(
-        connection_id: str,
+@router.patch("/icons/{icon_id}/tags/{tag_id}", response_model=dict)
+def add_tag_to_icon(
         icon_id: str,
-        body: IconScore,
+        tag_id: str,
         db: Annotated[MongoRepository, Depends(get_mongo_repository)]
 ):
-    db.add_icon_to_connection(icon_id, connection_id, body.score)
+    db.add_tag_to_icon(icon_id, tag_id)
     return {"added": True}
 
 
-@router.delete("/connections/{connection_id}/icons/{icon_id}", response_model=dict)
-def remove_icon_from_collection(
-        connection_id: str,
+@router.delete("/icons/{icon_id}/tags/{tag_id}", response_model=dict)
+def remove_tag_from_icon(
         icon_id: str,
+        tag_id: str,
         db: Annotated[MongoRepository, Depends(get_mongo_repository)]
 ):
-    db.remove_icon_from_connection(connection_id, icon_id)
+    db.remove_tag_from_icon(icon_id, tag_id)
     return {"removed": True}
-
-
-@router.put("/connections/{connection_id}/icons/{icon_id}/score", response_model=dict)
-def update_icon_score(
-        connection_id: str,
-        icon_id: str,
-        body: IconScore,
-        db: Annotated[MongoRepository, Depends(get_mongo_repository)]
-):
-    db.update_icon_score(connection_id, icon_id, body.score)
-    return {"updated": True}
-
-
-@router.get("/icons/{icon_id}/connections", response_model=list[dict])
-def get_connections_for_icon(icon_id: str, db: Annotated[MongoRepository, Depends(get_mongo_repository)]):
-    return db.get_connections_by_icon(icon_id)
 
 
 @router.get("/credits")
