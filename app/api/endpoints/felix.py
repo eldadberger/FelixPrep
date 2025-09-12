@@ -1,9 +1,8 @@
-from typing import Annotated, Optional, List
+from typing import Annotated, Optional
 from fastapi import APIRouter, Depends, Query
-from app.common.schemas.mongo.ConnectionCreate import ConnectionCreate
-from app.common.schemas.mongo.ConnectionResponse import ConnectionResponse
-from app.common.schemas.mongo.Credit import Credit
-from app.common.schemas.mongo.IconScore import IconScore
+
+from app.common.schemas.mongo.credits.CreditCreate import CreditCreate
+from app.common.schemas.mongo.credits.CreditUpdate import CreditUpdate
 from app.common.schemas.mongo.icons.IconCreate import IconCreate
 from app.common.schemas.mongo.tags.TagCreate import TagCreate
 from app.repositories.deps import get_mongo_repository
@@ -45,6 +44,11 @@ def delete_icon(
 @router.get("/tags")
 def get_all_tags(db: Annotated[MongoRepository, Depends(get_mongo_repository)]):
     return db.get_all_tags()
+
+
+@router.get("/tags/{tag_id}")
+def get_single_tag(db: Annotated[MongoRepository, Depends(get_mongo_repository)], tag_id: str):
+    return db.get_single_tag(tag_id)
 
 
 @router.get("/tags/{tag_id}/icons")
@@ -94,12 +98,12 @@ def get_credits(db: Annotated[MongoRepository, Depends(get_mongo_repository)]):
 
 
 @router.post("/credits")
-def insert_credit(credit: Credit, db: Annotated[MongoRepository, Depends(get_mongo_repository)]):
+def insert_credit(credit: CreditCreate, db: Annotated[MongoRepository, Depends(get_mongo_repository)]):
     return db.insert_credit(credit)
 
 
 @router.patch("/credits/{credit_id}")
-def update_credit_by_id(credit_id: str, update_data: Credit,
+def update_credit_by_id(credit_id: str, update_data: CreditUpdate,
                         db: Annotated[MongoRepository, Depends(get_mongo_repository)]):
     db.update_credit_by_id(credit_id, update_data.dict())
     return {"updated": True}

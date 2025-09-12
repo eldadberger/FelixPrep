@@ -1,8 +1,10 @@
 from fastapi import HTTPException
-from typing import Optional, List
+from typing import Optional
 from bson import ObjectId
 from pymongo import ASCENDING
-from app.common.schemas.mongo.Credit import Credit
+
+from app.common.schemas.mongo.credits.CreditCreate import CreditCreate
+from app.common.schemas.mongo.deprecated.Credit import Credit
 from starlette import status
 from app.common.schemas.mongo.icons.IconCreate import IconCreate
 from app.common.schemas.mongo.icons.IconExapndedResponse import IconExpandedResponse
@@ -61,7 +63,7 @@ class MongoRepository:
         ]
 
         icons = list(self.icons.aggregate(pipeline))
-        return [IconExpandedResponse(**icon).dict() for icon in icons]
+        return [IconExpandedResponse(**icon).model_dump(by_alias=True) for icon in icons]
 
     def get_icon_by_id(self, icon_id: str):
         pipeline = [
@@ -93,7 +95,7 @@ class MongoRepository:
 
         icon = list(self.icons.aggregate(pipeline))
         if icon:
-            return IconExpandedResponse(**icon[0]).dict()
+            return IconExpandedResponse(**icon[0]).model_dump(by_alias=True)
         raise HTTPException(status_code=404, detail="Icon not found")
 
     def create_icon(self, icon: IconCreate) -> str:
@@ -105,10 +107,8 @@ class MongoRepository:
             icon_id: str,
             name: Optional[str] = None,
             svg: Optional[str] = None,
-            credit_id: Optional[str] = None
+            credit_id: Optional[ObjectId] = None
     ):
-        icon_obj_id = ObjectId(icon_id)
-
         update_fields = {}
         unset_fields = {}
 
@@ -134,7 +134,7 @@ class MongoRepository:
             update_query["$unset"] = unset_fields
 
         result = self.icons.find_one_and_update(
-            {"_id": icon_obj_id},
+            {"_id": ObjectId(icon_id)},
             update_query,
             return_document=True
         )
@@ -161,7 +161,7 @@ class MongoRepository:
         ]
 
         expanded = self.icons.aggregate(pipeline).to_list(length=1)
-        return IconExpandedResponse(**expanded[0]).dict()
+        return IconExpandedResponse(**expanded[0]).model_dump(by_alias=True)
 
     def delete_icon(self, icon_id):
         icon_id = ObjectId(icon_id)
@@ -172,9 +172,38 @@ class MongoRepository:
         tags = list(self.tags.find({}))
         return [TagResponse(**tag).dict() for tag in tags]
 
+    def get_single_tag(self, tag_id):
+        tag = self.tags.find_one({"_id": ObjectId(tag_id)})
+        return TagResponse(**tag).dict()
+
     def get_tag_icons(self, tag_id: str):
-        tags = list(self.icons.find({"tags": ObjectId(tag_id)}))
-        return [TagResponse(**tag).dict() for tag in tags]
+        pipeline = [
+            {"$match": {"tags": {"$in": [ObjectId(tag_id)]}}},
+            {
+                "$lookup": {
+                    "from": "credits",
+                    "localField": "credit",
+                    "foreignField": "_id",
+                    "as": "credit"
+                }
+            },
+            {
+                "$lookup": {
+                    "from": "tags",
+                    "localField": "tags",
+                    "foreignField": "_id",
+                    "as": "tags"
+                }
+            },
+            {
+                "$addFields": {
+                    "credit": {"$arrayElemAt": ["$credit", 0]}
+                }
+            }
+        ]
+
+        icons = list(self.icons.aggregate(pipeline))
+        return [IconExpandedResponse(**icon).dict() for icon in icons]
 
     def create_tag(self, tag: TagCreate) -> str:
         result = self.tags.insert_one(tag.dict())
@@ -215,31 +244,22 @@ class MongoRepository:
             {"$pull": {"tags": ObjectId(tag_id)}}
         )
 
-    def get_connections_by_icon(self, icon_id: str):
-        icon_obj_id = ObjectId(icon_id)
-        connections = self.tags.find(
-            {"icons.id": icon_obj_id},
-            {"name": 1}  # Only return name field plus _id by default
-        )
-        return [{"id": str(conn["_id"]), "name": conn["name"]} for conn in connections]
-
     def get_all_credits(self):
-        res = self.credits.find({})
+        res = list(self.credits.find({}))
         return [
             {
                 "id": str(c["_id"]),
-                "set_name": c.get("set_name"),
+                "setName": c.get("setName"),
                 "author": c.get("author"),
                 "source": c.get("source"),
-                "license_name": c.get("license_name"),
-                "license_url": c.get("license_url"),
+                "licenseName": c.get("licenseName"),
+                "licenseSource": c.get("licenseSource"),
             }
             for c in res
         ]
 
-    def insert_credit(self, credit: Credit):
-        doc = credit.dict()
-        doc["_id"] = ObjectId()
+    def insert_credit(self, credit: CreditCreate):
+        doc = credit.model_dump(by_alias=True)
         result = self.credits.insert_one(doc)
         return {"id": str(result.inserted_id)}
 

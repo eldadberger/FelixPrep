@@ -1,6 +1,6 @@
 from typing import Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 
 
 class CreditBase(BaseModel):
@@ -9,4 +9,6 @@ class CreditBase(BaseModel):
     source: Optional[str] = None
     license_name: Optional[str] = Field(None, alias="licenseName")
     license_source: Optional[str] = Field(None, alias="licenseSource")
-    
+
+    class Config:
+        populate_by_name = True
