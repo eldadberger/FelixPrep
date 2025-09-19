@@ -15,7 +15,7 @@ from app.common.schemas.mongo.tags.TagResponse import TagResponse
 class MongoRepository:
     def __init__(self, client):
         self.client = client
-        self.db = self.client["felix"]
+        self.db = self.client["doudu"]
         self.icons = self.db["icons"]
         self.tags = self.db["tags"]
         self.credits = self.db["credits"]
@@ -102,43 +102,50 @@ class MongoRepository:
         result = self.icons.insert_one(icon.to_mongo())
         return str(result.inserted_id)
 
-    def update_icon_by_id(
-            self,
-            icon_id: str,
-            name: Optional[str] = None,
-            svg: Optional[str] = None,
-            credit_id: Optional[ObjectId] = None
-    ):
-        update_fields = {}
-        unset_fields = {}
+    def update_icon_by_id(self, icon_id: str, icon: IconCreate):
+        update_data = icon.model_dump(by_alias=True, exclude_unset=True)
 
-        if name is not None:
-            update_fields["name"] = name
-        if svg is not None:
-            update_fields["svg"] = svg
-        if credit_id is not None:
-            update_fields["credit"] = credit_id
-        elif credit_id is None:
-            unset_fields["credit"] = ""
-
-        if not update_fields and not unset_fields:
+        if not update_data:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="At least one field (name, svg or credit_id) must be provided for update."
+                detail="At least one field must be provided for update."
             )
 
+        set_fields = {}
+        unset_fields = {}
+
+        if "credit" in update_data:
+            credit_id = update_data.pop("credit")
+            if credit_id is None:
+                unset_fields["credit"] = ""
+            else:
+                set_fields["credit"] = ObjectId(credit_id)
+
+        # Separate unset fields
+        for key, value in update_data.items():
+            if value is None:
+                unset_fields[key] = ""
+            else:
+                set_fields[key] = value
+
+        # Build update query
         update_query = {}
-        if update_fields:
-            update_query["$set"] = update_fields
+        if set_fields:
+            update_query["$set"] = set_fields
         if unset_fields:
             update_query["$unset"] = unset_fields
 
+        # Update in Mongo
         result = self.icons.find_one_and_update(
             {"_id": ObjectId(icon_id)},
             update_query,
             return_document=True
         )
 
+        if not result:
+            raise HTTPException(status_code=404, detail="Icon not found")
+
+        # Expand references
         pipeline = [
             {"$match": {"_id": result["_id"]}},
             {
@@ -157,7 +164,7 @@ class MongoRepository:
                     "as": "tags"
                 }
             },
-            {"$addFields": {"credit": {"$arrayElemAt": ["$credit", 0]}}},
+            {"$addFields": {"credit": {"$arrayElemAt": ["$credit", 0]}}}
         ]
 
         expanded = self.icons.aggregate(pipeline).to_list(length=1)

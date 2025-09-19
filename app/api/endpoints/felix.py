@@ -29,7 +29,7 @@ def create_icon(icon: IconCreate, db: Annotated[MongoRepository, Depends(get_mon
 
 @router.put("/icons/{icon_id}")
 def update_icon(icon_id: str, icon: IconCreate, db: Annotated[MongoRepository, Depends(get_mongo_repository)]):
-    return db.update_icon_by_id(icon_id, icon.name, icon.svg, icon.credit)
+    return db.update_icon_by_id(icon_id, icon)
 
 
 @router.delete("/icons/{icon_id}")
