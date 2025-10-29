@@ -23,7 +23,8 @@ class MongoRepository:
 
     def _ensure_indexes(self):
         self.icons.create_index("name", unique=True)
-        self.icons.create_index("svg", unique=True)
+        self.icons.create_index("baseSvg", unique=True)
+        self.icons.create_index("svgTemplate", unique=True)
         self.tags.create_index("name", unique=True)
         self.credits.create_index(
             [("set_name", ASCENDING), ("author", ASCENDING)],
@@ -99,6 +100,9 @@ class MongoRepository:
         raise HTTPException(status_code=404, detail="Icon not found")
 
     def create_icon(self, icon: IconCreate) -> str:
+        if not icon.svg_template:
+            icon.svg_template = icon.base_svg
+
         result = self.icons.insert_one(icon.to_mongo())
         return str(result.inserted_id)
 
@@ -210,7 +214,7 @@ class MongoRepository:
         ]
 
         icons = list(self.icons.aggregate(pipeline))
-        return [IconExpandedResponse(**icon).dict() for icon in icons]
+        return [IconExpandedResponse(**icon).model_dump(by_alias=True) for icon in icons]
 
     def create_tag(self, tag: TagCreate) -> str:
         result = self.tags.insert_one(tag.dict())

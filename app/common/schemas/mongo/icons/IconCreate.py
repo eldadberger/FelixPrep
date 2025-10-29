@@ -11,7 +11,7 @@ class IconCreate(IconBase):
     credit: Optional[PyObjectId] = None
 
     def to_mongo(self):
-        data = self.dict()
+        data = self.model_dump(by_alias=True)
         if self.credit:
             data["credit"] = ObjectId(self.credit)
         return data
